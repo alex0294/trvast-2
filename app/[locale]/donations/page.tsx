@@ -1,23 +1,18 @@
-﻿import Link from "next/link";
+import Link from "next/link";
+import DailyIncreaseCountdown from "@/components/donations/DailyIncreaseCountdown";
+import { getDonationSuggestedAmount } from "@/lib/donations/suggestedAmount";
 
-function getSuggestedAmount() {
-  const baseAmount = 1299;
-  const dailyIncrease = 5;
-  const start = new Date("2025-12-10T00:00:00Z");
-  const now = new Date();
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const diffDays = Math.max(0, Math.floor((now.getTime() - start.getTime()) / msPerDay));
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-  return baseAmount + diffDays * dailyIncrease;
-}
-
-export default function DonationsPage({
+export default async function DonationsPage({
   params,
 }: {
   params: { locale: string };
 }) {
   const { locale } = params;
-  const amount = getSuggestedAmount();
+  const { amount, baseAmount, dailyIncrease, nextTickAt, source } =
+    await getDonationSuggestedAmount();
 
   return (
     <div className="space-y-16">
@@ -157,6 +152,11 @@ export default function DonationsPage({
               <div className="text-4xl font-extrabold text-primary-300 md:text-5xl">
                 ${amount.toLocaleString()}
               </div>
+              {source !== "supabase" && (
+                <div className="text-[11px] text-amber-300/90">
+                  当前为本地计算（未读取 Supabase 配置）
+                </div>
+              )}
               <div className="flex items-center justify-center gap-3 text-xs md:text-sm">
                 <button className="inline-flex min-w-[80px] items-center justify-center rounded-full border border-primary-400 bg-primary-500/20 px-4 py-1 text-xs font-semibold text-primary-200 shadow-[0_0_20px_rgba(56,189,248,0.6)]">
                   USDT
@@ -172,17 +172,28 @@ export default function DonationsPage({
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] bg-primary-500/80 text-[9px] text-slate-950">
                 ✓
               </span>
-              <span>金额每日自动增加 $5</span>
+              <span className="flex items-center gap-2">
+                <span>金额每日自动增加 ${dailyIncrease}</span>
+                <span className="text-slate-500">·</span>
+                <DailyIncreaseCountdown
+                  nextTickAt={nextTickAt}
+                  dailyIncrease={dailyIncrease}
+                />
+              </span>
             </div>
 
             <div className="mt-8 grid gap-4 text-left text-slate-50 md:grid-cols-3">
               <div className="flex flex-col justify-center rounded-2xl border border-slate-700 bg-black/60 px-6 py-4 text-center">
                 <div className="text-xs font-semibold text-primary-200">起始金额</div>
-                <div className="mt-2 text-xl font-extrabold text-slate-50">$1299</div>
+                <div className="mt-2 text-xl font-extrabold text-slate-50">
+                  ${baseAmount.toLocaleString()}
+                </div>
               </div>
               <div className="flex flex-col justify-center rounded-2xl border border-slate-700 bg-black/60 px-6 py-4 text-center">
                 <div className="text-xs font-semibold text-primary-200">每日增长</div>
-                <div className="mt-2 text-xl font-extrabold text-slate-50">+ $5</div>
+                <div className="mt-2 text-xl font-extrabold text-slate-50">
+                  + ${dailyIncrease}
+                </div>
               </div>
               <div className="flex flex-col justify-center rounded-2xl border border-slate-700 bg-black/60 px-6 py-4 text-center">
                 <div className="text-xs font-semibold text-primary-200">支付方式</div>
@@ -439,5 +450,3 @@ export default function DonationsPage({
     </div>
   );
 }
-
-
