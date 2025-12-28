@@ -21,14 +21,7 @@ function getFallback() {
 
   const amount = baseAmount + diffDays * dailyIncrease;
   const nextTickAt = new Date(
-    Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate() + 1,
-      0,
-      0,
-      0,
-    ),
+    start.getTime() + (diffDays + 1) * msPerDay,
   ).toISOString();
 
   return { amount, baseAmount, dailyIncrease, nextTickAt, source: "fallback" as const };
