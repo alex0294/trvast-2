@@ -1,0 +1,650 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+type DimensionKey = "risk" | "emotion" | "decision" | "discipline" | "stress";
+
+type QuestionOption = {
+  text: string;
+  score: number; // 1-4
+};
+
+type Question = {
+  id: number;
+  dimension: DimensionKey;
+  text: string;
+  options: QuestionOption[];
+};
+
+const DIMENSIONS: Record<
+  DimensionKey,
+  { label: string; short: string; description: string }
+> = {
+  risk: {
+    label: "风险承受能力",
+    short: "R",
+    description: "你是否能客观看待亏损，接受合理波动而不失控加仓或死扛。",
+  },
+  emotion: {
+    label: "情绪控制能力",
+    short: "E",
+    description: "在连续盈利或亏损后，能否保持平稳心态，避免情绪化交易。",
+  },
+  decision: {
+    label: "决策能力",
+    short: "D",
+    description: "在有限时间和信息下，是否有清晰的交易流程与执行节奏。",
+  },
+  discipline: {
+    label: "纪律性",
+    short: "Z",
+    description:
+      "是否愿意长期遵守自己的交易规则，包括止损、仓位和复盘计划。",
+  },
+  stress: {
+    label: "压力管理",
+    short: "S",
+    description:
+      "在资金回撤或市场剧烈波动中，能否管理压力、避免过度关注盈亏。",
+  },
+};
+
+// 参考 alex294 项目中的 5 维度 / 20 题结构，内容做了简化与本地化
+const QUESTIONS: Question[] = [
+  // Risk
+  {
+    id: 1,
+    dimension: "risk",
+    text: "当账户在一天内回撤 10% 时，你最真实的反应是？",
+    options: [
+      { text: "立刻全部平仓，短期不再交易", score: 1 },
+      { text: "非常焦虑，但还是继续盯盘", score: 2 },
+      { text: "冷静分析原因，按计划调整仓位", score: 3 },
+      { text: "接受这是正常波动，继续执行系统", score: 4 },
+    ],
+  },
+  {
+    id: 2,
+    dimension: "risk",
+    text: "你通常给单笔交易设置的最大亏损（相对账户权益）是？",
+    options: [
+      { text: "没有固定标准，看感觉", score: 2 },
+      { text: "3% 以上", score: 4 },
+      { text: "1%–3%", score: 3 },
+      { text: "1% 以内", score: 1 },
+    ],
+  },
+  {
+    id: 3,
+    dimension: "risk",
+    text: "面对一笔你认为胜率很高的机会，你会投入多少仓位？",
+    options: [
+      { text: "几乎满仓，甚至加杠杆", score: 2 },
+      { text: "50% 左右的大仓位", score: 4 },
+      { text: "根据风险模型适度加仓", score: 2 },
+      { text: "仍然遵守既定仓位上限", score: 1 },
+    ],
+  },
+  {
+    id: 4,
+    dimension: "risk",
+    text: "你对“连续几笔小亏损”的态度更接近？",
+    options: [
+      { text: "很难接受，会想一次性把亏损赚回来", score: 4 },
+      { text: "有点烦躁，会下意识加大仓位", score: 3 },
+      { text: "可以接受，视为系统的一部分", score: 2 },
+      { text: "习惯性对回撤有预期，提前做好心理建设", score: 1 },
+    ],
+  },
+
+  // Emotion
+  {
+    id: 5,
+    dimension: "emotion",
+    text: "连续盈利之后，你更常见的状态是？",
+    options: [
+      { text: "兴奋膨胀，开始随意进场", score: 1 },
+      { text: "信心明显上升，容易忽略风险", score: 2 },
+      { text: "会提醒自己冷静，但偶尔会放松标准", score: 4 },
+      { text: "仍按原计划执行，不因盈亏改变节奏", score: 3 },
+    ],
+  },
+  {
+    id: 6,
+    dimension: "emotion",
+    text: "你在交易外的生活，会频繁被盈亏结果影响情绪吗？",
+    options: [
+      { text: "经常，甚至影响睡眠和人际关系", score: 1 },
+      { text: "有时会，尤其在大亏之后", score: 3 },
+      { text: "偶尔会有波动，但能较快恢复", score: 4 },
+      { text: "大多数时候能把交易和生活分开", score: 2 },
+    ],
+  },
+  {
+    id: 7,
+    dimension: "emotion",
+    text: "当盘中出现剧烈波动，你正在持仓时，你会？",
+    options: [
+      { text: "情绪激动，频繁改止损 / 加仓", score: 1 },
+      { text: "感觉紧张，很想看每一笔波动", score: 2 },
+      { text: "按计划处理，但心里会比较紧绷", score: 4 },
+      { text: "先看风险是否在可控范围，再冷静决策", score: 3 },
+    ],
+  },
+  {
+    id: 8,
+    dimension: "emotion",
+    text: "你是否容易因一两笔极端交易，而对自己的能力产生巨大怀疑？",
+    options: [
+      { text: "是，经常觉得自己不适合做交易", score: 1 },
+      { text: "有时会，不顺的时候特别明显", score: 2 },
+      { text: "偶尔会，但能通过复盘找回信心", score: 4 },
+      { text: "不会，更多关注长期曲线而不是单笔结果", score: 3 },
+    ],
+  },
+
+  // Decision
+  {
+    id: 9,
+    dimension: "decision",
+    text: "你做出进场决策时，主要依据是？",
+    options: [
+      { text: "直觉 / 群聊 / 新闻情绪", score: 1 },
+      { text: "一两个技术指标的信号", score: 3 },
+      { text: "清晰的技术结构 + 风控前提", score: 3 },
+      { text: "完整的交易系统和事先写好的计划", score: 4 },
+    ],
+  },
+  {
+    id: 10,
+    dimension: "decision",
+    text: "当市场与预期完全相反时，你通常会？",
+    options: [
+      { text: "死扛，期待市场“终会回来的”", score: 1 },
+      { text: "犹豫很久才止损，往往拖到更大亏损", score: 3 },
+      { text: "按计划止损，然后复盘", score: 4 },
+      { text: "提前设置好止损，不到点绝不干预", score: 2 },
+    ],
+  },
+  {
+    id: 11,
+    dimension: "decision",
+    text: "对于一笔错过的好机会，你的感受更接近？",
+    options: [
+      { text: "很后悔，下次可能会强行追单", score: 1 },
+      { text: "有遗憾，会更冲动地看下一笔", score: 2 },
+      { text: "提醒自己“机会很多”，继续按节奏来", score: 3 },
+      { text: "习惯接受错过，把注意力放在可控部分", score: 4 },
+    ],
+  },
+  {
+    id: 12,
+    dimension: "decision",
+    text: "你是否有固定时间做交易计划和盘前准备？",
+    options: [
+      { text: "没有，想到什么做什么", score: 1 },
+      { text: "偶尔会简单看一下", score: 2 },
+      { text: "大多数交易日前都会准备", score: 4 },
+      { text: "每天有固定流程：计划、跟踪、复盘", score: 3 },
+    ],
+  },
+
+  // Discipline
+  {
+    id: 13,
+    dimension: "discipline",
+    text: "你设置好止损位之后，执行情况如何？",
+    options: [
+      { text: "经常移动或取消止损", score: 1 },
+      { text: "偶尔会因为情绪调整止损", score: 2 },
+      { text: "大部分时候能执行", score: 3 },
+      { text: "几乎从不违背预设止损", score: 4 },
+    ],
+  },
+  {
+    id: 14,
+    dimension: "discipline",
+    text: "关于交易日志 / 复盘，你的习惯是？",
+    options: [
+      { text: "从不记录，只看结果盈亏", score: 1 },
+      { text: "只有大赚 / 大亏时才简单记一下", score: 2 },
+      { text: "经常记录关键交易和情绪变化", score: 3 },
+      { text: "有固定模板，持续记录与复盘", score: 4 },
+    ],
+  },
+  {
+    id: 15,
+    dimension: "discipline",
+    text: "你是否经常在计划之外“临时加仓”或“突发开新单”？",
+    options: [
+      { text: "经常，这种情况很多", score: 1 },
+      { text: "偶尔，尤其在情绪激动时", score: 2 },
+      { text: "很少，大部分交易都在计划内", score: 3 },
+      { text: "几乎不会，严格限制交易次数和频率", score: 4 },
+    ],
+  },
+  {
+    id: 16,
+    dimension: "discipline",
+    text: "你是否给自己设定过“暂停交易”的条件？",
+    options: [
+      { text: "没有，一直在市场里", score: 1 },
+      { text: "只有极端情况才会停一下", score: 2 },
+      { text: "有，例如单日连亏或连续错单", score: 3 },
+      { text: "有清晰规则，并严格执行休息机制", score: 4 },
+    ],
+  },
+
+  // Stress
+  {
+    id: 17,
+    dimension: "stress",
+    text: "你多久会查看一次持仓盈亏？",
+    options: [
+      { text: "几乎每分钟都要看一眼", score: 1 },
+      { text: "每隔几分钟或十几分钟看一次", score: 2 },
+      { text: "按既定节奏或 K 线级别查看", score: 3 },
+      { text: "只在关键时点（进场、出场、收盘）查看", score: 4 },
+    ],
+  },
+  {
+    id: 18,
+    dimension: "stress",
+    text: "当你处于回撤阶段时，身体上的反应更接近？",
+    options: [
+      { text: "心跳加快、出汗、睡不好觉", score: 1 },
+      { text: "会紧张，常常反复看行情", score: 2 },
+      { text: "略有不适，但还能保持日常节奏", score: 4 },
+      { text: "能相对稳定地对待回撤，不放大情绪", score: 3 },
+    ],
+  },
+  {
+    id: 19,
+    dimension: "stress",
+    text: "你是否有固定的方式来疏导交易压力？",
+    options: [
+      { text: "几乎没有，只能硬扛", score: 1 },
+      { text: "偶尔会运动 / 倾诉，但不稳定", score: 2 },
+      { text: "有，且能在高压时期主动使用", score: 4 },
+      { text: "有一套成熟的压力管理习惯", score: 3 },
+    ],
+  },
+  {
+    id: 20,
+    dimension: "stress",
+    text: "总体来说，你对当前交易状态的压力感评分（主观）是？",
+    options: [
+      { text: "压力非常大，几乎透不过气", score: 1 },
+      { text: "压力偏大，但还能维持", score: 2 },
+      { text: "有压力，但大部分时间可控", score: 3 },
+      { text: "总体压力适中，处在可接受范围", score: 4 },
+    ],
+  },
+];
+
+type AnswerMap = Record<number, number>;
+
+type ScoreSummary = {
+  overallPercentage: number;
+  dimensions: Record<
+    DimensionKey,
+    { score: number; max: number; percentage: number }
+  >;
+};
+
+const MAX_SCORE_PER_QUESTION = 4;
+
+function calculateScores(answers: AnswerMap): ScoreSummary | null {
+  if (Object.keys(answers).length === 0) return null;
+
+  const dimensionScores: Record<
+    DimensionKey,
+    { score: number; count: number }
+  > = {
+    risk: { score: 0, count: 0 },
+    emotion: { score: 0, count: 0 },
+    decision: { score: 0, count: 0 },
+    discipline: { score: 0, count: 0 },
+    stress: { score: 0, count: 0 },
+  };
+
+  let totalScore = 0;
+
+  // 按照 alex294 项目中的逻辑：
+  // - 遍历所有题目，累计各维度得分与总分
+  // - 总分的满分固定为「题目数量 * 4」
+  for (const q of QUESTIONS) {
+    const answer = answers[q.id];
+    if (typeof answer !== "number") continue;
+
+    const dim = dimensionScores[q.dimension];
+    dim.score += answer;
+    dim.count += 1;
+    totalScore += answer;
+  }
+
+  const maxTotalScore = QUESTIONS.length * MAX_SCORE_PER_QUESTION;
+  if (maxTotalScore === 0) return null;
+
+  const dimensions = Object.entries(dimensionScores).reduce(
+    (acc, [key, value]) => {
+      const max = value.count * MAX_SCORE_PER_QUESTION || 1;
+      const average = value.count > 0 ? value.score / value.count : 0;
+      const percentage = Math.round(
+        (average / MAX_SCORE_PER_QUESTION) * 100,
+      );
+      acc[key as DimensionKey] = {
+        score: value.score,
+        max,
+        percentage,
+      };
+      return acc;
+    },
+    {} as ScoreSummary["dimensions"],
+  );
+
+  const overallPercentage = Math.round(
+    (totalScore / maxTotalScore) * 100,
+  );
+
+  return {
+    overallPercentage,
+    dimensions,
+  };
+}
+
+function getOverallLabel(pct: number): string {
+  if (pct >= 85) return "心理素质优秀，适合逐步放大资金和节奏";
+  if (pct >= 70) return "心理基础良好，适合在风控下逐步加深训练";
+  if (pct >= 55)
+    return "部分维度存在明显短板，建议先以小资金 / 模拟为主";
+  return "当前心理承受能力较弱，建议系统训练前先优化心态与压力管理";
+}
+
+export default function AssessmentTestPage() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<AnswerMap>({});
+  const [showResult, setShowResult] = useState(false);
+
+  const totalQuestions = QUESTIONS.length;
+  const safeIndex =
+    totalQuestions > 0 ? Math.min(currentIndex, totalQuestions - 1) : 0;
+  const currentQuestion = QUESTIONS[safeIndex];
+
+  const progress = Math.round(
+    ((Object.keys(answers).length || 0) / totalQuestions) * 100,
+  );
+
+  const summary = useMemo(() => calculateScores(answers), [answers]);
+
+  const handleSelect = (questionId: number, score: number) => {
+    setAnswers((prev) => {
+      const next = { ...prev, [questionId]: score };
+
+      // 已答题数量
+      const answeredCount = Object.keys(next).length;
+
+      // 所有题都答完才出结果
+      if (answeredCount >= totalQuestions) {
+        setShowResult(true);
+      } else {
+        // 根据当前题的 id 找到在 QUESTIONS 中的下标
+        const currentIdxInList = QUESTIONS.findIndex(
+          (q) => q.id === questionId,
+        );
+        const startIndex =
+          currentIdxInList === -1 ? currentIndex : currentIdxInList;
+
+        // 从当前题往后找下一道「未作答」的题
+        let nextIndex = startIndex;
+        for (let offset = 1; offset < totalQuestions; offset++) {
+          const idx = (startIndex + offset) % totalQuestions;
+          const q = QUESTIONS[idx];
+          if (next[q.id] === undefined) {
+            nextIndex = idx;
+            break;
+          }
+        }
+
+        setCurrentIndex(nextIndex);
+      }
+
+      return next;
+    });
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex((prev) => prev - 1);
+    }
+  };
+
+  const handleRestart = () => {
+    setAnswers({});
+    setCurrentIndex(0);
+    setShowResult(false);
+  };
+
+  if (showResult && summary) {
+    return (
+      <div className="section space-y-10">
+        <div className="text-center space-y-3">
+          <h1 className="text-3xl font-extrabold tracking-[0.3em] text-slate-50 md:text-4xl">
+            测评结果
+          </h1>
+          <p className="text-sm text-slate-300">
+            以下结果仅用于了解你的交易心理特征，不构成任何投资建议。
+          </p>
+        </div>
+
+        <div className="card space-y-6">
+          <div className="flex flex-col items-center gap-4 md:flex-row md:items-center md:gap-8">
+            <div className="relative flex h-28 w-28 items-center justify-center rounded-full bg-slate-900">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-cyan-400/40 via-sky-500/50 to-fuchsia-500/40 blur-xl" />
+              <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-cyan-400/70 bg-slate-950">
+                <span className="text-3xl font-extrabold text-sky-300">
+                  {summary.overallPercentage}
+                </span>
+                <span className="ml-1 text-sm text-slate-400">/100</span>
+              </div>
+            </div>
+            <div className="flex-1 space-y-2 text-sm text-slate-200">
+              <div className="text-base font-semibold text-sky-300">
+                综合评价
+              </div>
+              <p>{getOverallLabel(summary.overallPercentage)}</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="text-sm font-semibold text-slate-100">
+              分维度得分
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 md:p-5">
+              <div className="space-y-4">
+                {(Object.keys(DIMENSIONS) as DimensionKey[]).map((key) => {
+                  const dim = DIMENSIONS[key];
+                  const data = summary.dimensions[key];
+
+                  return (
+                    <div key={key} className="space-y-2">
+                      <div className="flex items-center justify-between text-xs md:text-sm">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-950 border border-sky-400/70 text-[11px] font-bold tracking-[0.22em] text-sky-300">
+                            {dim.short}
+                          </span>
+                          <span className="text-sm font-semibold text-slate-100">
+                            {dim.label}
+                          </span>
+                        </div>
+                        <span className="text-xs font-semibold text-sky-300 md:text-sm">
+                          {data.percentage}%
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="h-2 flex-1 rounded-full bg-slate-900">
+                          <div
+                            className="h-2 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500"
+                            style={{ width: `${data.percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 border-t border-slate-800 pt-4">
+            <div className="rounded-3xl border border-slate-700 bg-slate-950/80 p-4 md:p-5">
+              <div className="mb-4 text-xl font-semibold text-slate-50 md:text-2xl">
+                改进建议
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  {
+                    tag: "学习",
+                    title: "系统学习",
+                    text: "深入学习交易心理学和行为金融学，理解交易中的心理陷阱和认知偏差。",
+                  },
+                  {
+                    tag: "记录",
+                    title: "记录交易日志",
+                    text: "详细记录每笔交易的思路、决策过程和结果，定期回顾复盘。",
+                  },
+                  {
+                    tag: "训练",
+                    title: "模拟训练",
+                    text: "通过模拟交易来熟悉策略和执行能力，在无风险环境中提升技能。",
+                  },
+                  {
+                    tag: "冥想",
+                    title: "冥想练习",
+                    text: "每天进行 10–15 分钟的冥想，提升专注力和情绪管理能力。",
+                  },
+                ].map((item, index) => (
+                  <div
+                    key={index}
+                    className="flex items-start gap-4 rounded-2xl bg-slate-900/80 px-4 py-3"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-sky-400/70 bg-slate-950 text-xs font-semibold text-sky-300">
+                      {item.tag}
+                    </div>
+                    <div className="space-y-1 text-xs md:text-sm">
+                      <div className="font-semibold text-slate-100">
+                        {item.title}
+                      </div>
+                      <p className="text-slate-400">{item.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                onClick={handleRestart}
+                className="inline-flex min-w-[180px] items-center justify-center rounded-full bg-gradient-to-r from-sky-400 via-cyan-400 to-primary-500 px-9 py-3 text-sm font-semibold text-slate-950 shadow-[0_0_24px_rgba(56,189,248,0.9)] ring-1 ring-cyan-300/70 hover:scale-[1.02] hover:shadow-[0_0_32px_rgba(56,189,248,1)] md:text-lg"
+              >
+                重新测试
+              </button>
+            </div>
+          </div>
+
+          <div className="hidden">
+            <p>
+              建议：结合你得分较低的维度，优先练习风控、复盘和情绪管理，不要急于放大资金。
+            </p>
+            <button
+              type="button"
+              onClick={handleRestart}
+              className="rounded-full border border-sky-400/70 px-4 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/10"
+            >
+              重新测试
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="section space-y-8">
+      <div className="mx-auto h-2 max-w-xl overflow-hidden rounded-full bg-slate-900">
+        <div
+          className="h-2 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="text-center text-xs text-slate-400">
+        已完成 {Object.keys(answers).length}/{totalQuestions} 题
+      </div>
+
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between text-xs text-slate-400">
+          <span>
+            第{" "}
+            <span className="font-semibold text-sky-300">
+              {currentIndex + 1}
+            </span>{" "}
+            题
+          </span>
+          <span>{DIMENSIONS[currentQuestion.dimension].label}</span>
+        </div>
+
+        <div className="text-lg font-semibold text-slate-100 md:text-xl">
+          {currentQuestion.text}
+        </div>
+
+        <div className="space-y-[25px]">
+          {currentQuestion.options.map((opt, idx) => {
+            const selected = answers[currentQuestion.id] === opt.score;
+            const label = String.fromCharCode(65 + idx); // A, B, C, D
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSelect(currentQuestion.id, opt.score)}
+                className={`mx-auto flex w-[calc(100%-150px)] items-center justify-between rounded-xl border px-6 py-2 text-left text-sm md:text-base transition-all ${
+                  selected
+                    ? "border-cyan-400 bg-slate-900 text-sky-200 shadow-[0_0_26px_rgba(56,189,248,0.6)]"
+                    : "border-transparent bg-slate-950/80 text-slate-200 hover:border-cyan-400/60 hover:bg-slate-900"
+                }`}
+              >
+                <span className="mr-3 flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs md:text-sm font-semibold text-sky-300">
+                  {label}
+                </span>
+                <span className="flex-1">{opt.text}</span>
+                {selected && (
+                  <span className="ml-3 text-[10px] font-semibold text-cyan-300">
+                    已选择
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-start pt-2 text-xs text-slate-500">
+          <button
+            type="button"
+            onClick={handlePrev}
+            disabled={currentIndex === 0}
+            className="rounded-full border border-slate-700 px-4 py-1.5 font-semibold text-slate-300 disabled:opacity-40"
+          >
+            上一题
+          </button>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-2xl text-center text-[11px] text-slate-500">
+        温馨提示：本测评仅用于自我了解和训练营匹配，不构成投资建议，也不会对外公开你的个人作答。
+      </div>
+    </div>
+  );
+}
