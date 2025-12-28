@@ -20,9 +20,20 @@ function getFallback() {
   );
 
   const amount = baseAmount + diffDays * dailyIncrease;
-  const nextTickAt = new Date(
-    start.getTime() + (diffDays + 1) * msPerDay,
-  ).toISOString();
+  // Align with Supabase: use Asia/Shanghai day boundary.
+  const tzOffsetMs = 8 * 60 * 60 * 1000;
+  const bjNow = new Date(now.getTime() + tzOffsetMs);
+  const nextBjMidnightUtcMs =
+    Date.UTC(
+      bjNow.getUTCFullYear(),
+      bjNow.getUTCMonth(),
+      bjNow.getUTCDate() + 1,
+      0,
+      0,
+      0,
+    ) - tzOffsetMs;
+
+  const nextTickAt = new Date(nextBjMidnightUtcMs).toISOString();
 
   return { amount, baseAmount, dailyIncrease, nextTickAt, source: "fallback" as const };
 }
