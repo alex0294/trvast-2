@@ -40,7 +40,7 @@ type CareerStep = {
 const comparisonRows: ComparisonRow[] = [
   {
     label: "培训费用",
-    haohan: { main: "完全免费", sub: "无杂费", icon: "check" },
+    haohan: { main: "完全免费", icon: "check" },
     others: [
       { main: "考核费" },
       { main: "高额学费" },
